@@ -1,0 +1,14 @@
+#Terrafom
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+
+#Ansible
+.ansible/
+
+#Helm
+**/charts/
+
+#OS
+.env
