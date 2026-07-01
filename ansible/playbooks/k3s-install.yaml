@@ -1,0 +1,58 @@
+---
+- name: Install K3s on dev host
+  hosts: dev
+  become: true
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install K3s
+      shell: curl -sfL https://get.k3s.io | sh -
+      args:
+        creates: /usr/local/bin/k3s
+
+    - name: Check if K3s is running
+      command: systemctl is-active k3s
+      register: k3s_status
+      failed_when: k3s_status.stdout != "active"
+      changed_when: false
+
+    - name: Check if kubeconfig already exists locally
+      stat:
+        path: "{{ lookup('env', 'HOME') }}/.kube/config"
+      register: kubeconfig_file
+      delegate_to: localhost
+      become: false
+
+    - name: Fetch kubeconfig locally
+      fetch:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: ./kubeconfig
+        flat: yes
+      when: not kubeconfig_file.stat.exists
+
+    - name: Replace server address in kubeconfig
+      replace:
+        path: ./kubeconfig
+        regexp: '127.0.0.1'
+        replace: "{{ ansible_host }}"
+      delegate_to: localhost
+      become: false
+      when: not kubeconfig_file.stat.exists
+
+    - name: Ensure ~/.kube directory exists locally
+      file:
+        path: "{{ lookup('env', 'HOME') }}/.kube"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      become: false
+
+    - name: Copy kubeconfig to default location
+      copy:
+        src: ./kubeconfig
+        dest: "{{ lookup('env', 'HOME') }}/.kube/config"
+      delegate_to: localhost
+      become: false
