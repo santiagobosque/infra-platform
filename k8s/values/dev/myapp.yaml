@@ -1,11 +1,9 @@
 service:
   type: NodePort
   port: 3000
-
 replicaCount: 2
-
 podLabels:
   app: beauty-ai
-
 image:
   repository: ghcr.io/santiagobosque/ai-beauty
+  tag: sha-c261ffff22fb
