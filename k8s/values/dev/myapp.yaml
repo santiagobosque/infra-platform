@@ -6,7 +6,6 @@ podLabels:
   app: beauty-ai
 image:
   repository: ghcr.io/santiagobosque/ai-beauty
-  tag: sha-c261ffff22fb
-
+  tag: sha-42ac8841f2fd
 imagePullSecrets:
   - name: ghcr-cred
