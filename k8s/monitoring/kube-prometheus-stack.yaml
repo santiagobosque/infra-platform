@@ -1,0 +1,5 @@
+grafana:
+  additionalDataSources:
+    - name: loki
+      type: loki
+      url: http://loki-stack.loki.svc.cluster.local:3100
