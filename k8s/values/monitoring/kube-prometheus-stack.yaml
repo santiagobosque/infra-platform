@@ -3,3 +3,8 @@ grafana:
     - name: loki
       type: loki
       url: http://loki-stack.loki.svc.cluster.local:3100
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - grafana.10.10.10.233.nip.io
