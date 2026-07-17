@@ -1,7 +1,8 @@
 ---
 - name: Install K3s on dev host
-  hosts: dev
+  hosts: k3s
   become: true
+  serial: 1
 
   tasks:
     - name: Update apt cache
@@ -26,21 +27,46 @@
       delegate_to: localhost
       become: false
 
+    - name: Check existing contexts in local kubeconfig
+      ansible.builtin.command:
+        cmd: "kubectl config get-contexts -o name --kubeconfig={{ lookup('env', 'HOME') }}/.kube/config"
+      register: kube_contexts
+      delegate_to: localhost
+      become: false
+      when: kubeconfig_file.stat.exists
+      changed_when: false
+      failed_when: false
+
+    - name: Decide whether we need to fetch/merge this environment's kubeconfig
+      ansible.builtin.set_fact:
+        need_kubeconfig: >-
+          {{ not kubeconfig_file.stat.exists or
+              environment_name not in (kube_contexts.stdout_lines | default([])) }}
+
     - name: Fetch kubeconfig locally
       fetch:
         src: /etc/rancher/k3s/k3s.yaml
-        dest: ./kubeconfig
+        dest: "/tmp/kubeconfig-{{ environment_name }}"
         flat: yes
-      when: not kubeconfig_file.stat.exists
+      when: need_kubeconfig
 
     - name: Replace server address in kubeconfig
       replace:
-        path: ./kubeconfig
+        path: "/tmp/kubeconfig-{{ environment_name }}"
         regexp: '127.0.0.1'
         replace: "{{ ansible_host }}"
       delegate_to: localhost
       become: false
-      when: not kubeconfig_file.stat.exists
+      when: need_kubeconfig
+
+    - name: Rename context/cluster/user in kubeconfig to environment name
+      replace:
+        path: "/tmp/kubeconfig-{{ environment_name }}"
+        regexp: '(:\s+)default$'
+        replace: '\1{{ environment_name }}'
+      delegate_to: localhost
+      become: false
+      when: need_kubeconfig
 
     - name: Ensure ~/.kube directory exists locally
       file:
@@ -50,9 +76,22 @@
       delegate_to: localhost
       become: false
 
-    - name: Copy kubeconfig to default location
-      copy:
-        src: ./kubeconfig
-        dest: "{{ lookup('env', 'HOME') }}/.kube/config"
+    - name: Merge kubeconfigs in default location
+      ansible.builtin.shell: |
+        KUBECONFIG="{{ lookup('env', 'HOME') }}/.kube/config:/tmp/kubeconfig-{{ environment_name }}" \
+        kubectl config view --flatten > /tmp/kubeconfig-merged
       delegate_to: localhost
       become: false
+      when: need_kubeconfig
+      changed_when: true
+
+    - name: Replace default kubeconfig with merged version
+      ansible.builtin.copy:
+        src: /tmp/kubeconfig-merged
+        dest: "{{ lookup('env', 'HOME') }}/.kube/config"
+        mode: '0600'
+        remote_src: true
+      delegate_to: localhost
+      become: false
+      when: need_kubeconfig
+

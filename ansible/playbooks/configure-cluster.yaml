@@ -1,28 +1,42 @@
 ---
-- name: Create secret ghcr-cred in dev namespace
-  hosts: localhost
-  connection: local
+- name: Create namespace and secret ghcr-cred in that namespace
+  hosts: k3s
   gather_facts: false
 
   vars:
     ghcr_username: santiagobosque
-    ghcr_namespace: dev
+    ghcr_namespace: "{{ environment_name }}"
     ghcr_password: "{{ lookup('env', 'GHCR_TOKEN') }}"
 
   tasks:
+    - name: Ensure namespace {{ environment_name }} exists
+      ansible.builtin.shell:
+        cmd: >
+          kubectl create namespace {{ environment_name }}
+          --dry-run=client -o yaml 
+          | kubectl --context {{ environment_name }} apply -f -
+      delegate_to: localhost
+      become: false
+
+
+
     - name: Verify that token is set
       ansible.builtin.assert:
         that:
           - ghcr_password | length > 0
         fail_msg: "Brak GHCR_TOKEN w env — ustaw: export GHCR_TOKEN=..."
+      delegate_to: localhost
+      become: false
 
     - name: Create / update docker-registry secret
       ansible.builtin.shell: >
-        kubectl create secret docker-registry ghcr-cred
+        kubectl --context {{ environment_name }} create secret docker-registry ghcr-cred
         --docker-server=https://ghcr.io
         --docker-username={{ ghcr_username }}
         --docker-password="{{ ghcr_password }}"
         --namespace={{ ghcr_namespace }}
-        --dry-run=client -o yaml | kubectl apply -f -
+        --dry-run=client -o yaml | kubectl --context {{ environment_name }} apply -f -
       no_log: true
       changed_when: true
+      delegate_to: localhost
+      become: false
